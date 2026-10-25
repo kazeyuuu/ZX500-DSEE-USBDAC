@@ -1,0 +1,34 @@
+diff --git a/include/tinyalsa/pcm.h b/include/tinyalsa/pcm.h
+index d8699b0..84bb366 100644
+--- a/include/tinyalsa/pcm.h
++++ b/include/tinyalsa/pcm.h
+@@ -303,6 +303,8 @@ struct pcm *pcm_open_by_name(const char *name,
+ 
+ int pcm_close(struct pcm *pcm);
+ 
++int pcm_get_xruns(const struct pcm *pcm);
++
+ int pcm_is_ready(const struct pcm *pcm);
+ 
+ unsigned int pcm_get_channels(const struct pcm *pcm);
+diff --git a/src/pcm.c b/src/pcm.c
+index 6dc4d18..95d4c3a 100644
+--- a/src/pcm.c
++++ b/src/pcm.c
+@@ -975,6 +975,16 @@ int pcm_params_format_test(struct pcm_params *params, enum pcm_format format)
+     return pcm_mask_test(pcm_params_get_mask(params, PCM_PARAM_FORMAT), alsa_format);
+ }
+ 
++/** Returns the number of XRUNs observed by tinyalsa for this PCM.
++ * This read-only accessor does not change recovery or the data path.
++ * @param pcm A PCM returned by @ref pcm_open, or NULL.
++ * @return The XRUN counter, or zero for NULL.
++ */
++int pcm_get_xruns(const struct pcm *pcm)
++{
++    return pcm ? pcm->xruns : 0;
++}
++
+ /** Closes a PCM returned by @ref pcm_open.
+  * @param pcm A PCM returned by @ref pcm_open.
+  *  May not be NULL.

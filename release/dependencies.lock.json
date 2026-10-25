@@ -1,0 +1,15 @@
+{
+  "upstream_commit": "af3a7fba2e9043739f406d88690052c2a86416a6",
+  "upstream_bridge_source_sha256": "77bb991ed93e696390a8efe945a2210dd4495f80519ea085a89c50923c067367",
+  "fallback_binary_sha256": "d80136c9136ada8fdf829801880e26d7817c3ba554ea1124f0ad2494c1f6d336",
+  "tinyalsa_commit": "e43025bbf702eb7dd8edd48c1eb50530c60f1de8",
+  "tinyalsa_patch": "ZX500-USB-DAC/bridge/tinyalsa-xruns.patch",
+  "ndk": "r27c",
+  "jdk": "17",
+  "android_build_tools": "35.0.0",
+  "android_platform": "34",
+  "native_target": "armv7a-linux-androideabi22",
+  "app_min_sdk": 28,
+  "fallback_glibc": "2.23-0ubuntu11.3",
+  "fallback_gcc": "5.4.0-6ubuntu1~16.04.12"
+}

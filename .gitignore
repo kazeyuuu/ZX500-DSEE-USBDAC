@@ -1,0 +1,15 @@
+private/
+images/
+firmware/
+backups/
+downloads/
+__pycache__/
+tools/*
+!tools/dsee-tinyalsa/
+*.jks
+*.keystore
+*.apk
+ZX500-USB-DAC/bridge/uac2bridge
+ZX500-USB-DAC/bridge/uac2bridge-diag
+
+!/ZX-DSEE-0.3.1.apk

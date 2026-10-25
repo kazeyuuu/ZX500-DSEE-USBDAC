@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.apk binary
+*.xz binary
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.java text eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+*.patch text eol=lf

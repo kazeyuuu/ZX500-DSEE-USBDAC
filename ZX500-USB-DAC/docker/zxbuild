@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Run the ZX500 USB-DAC build steps inside the pinned container.
+#
+#   docker/zxbuild images     build the toolchain image
+#   docker/zxbuild fetch      clone/update the Sony kernel tree at its pinned commit
+#   docker/zxbuild kernel     build the kernel Image (GCC 4.9)
+#   docker/zxbuild bridge     build uac2bridge + uac2bridge-diag (GCC 5.4)
+#   docker/zxbuild test       build and run the resampler test
+#   docker/zxbuild all        images + fetch + kernel + bridge + test
+#   docker/zxbuild shell      open a shell in the build image
+#
+# Flashing and deployment are NOT containerised: fastboot and adb need USB
+# access that Docker on macOS cannot provide. Use ./flash.sh and ./deploy.sh
+# from the host once the artifacts exist.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DOCKER="${DOCKER:-docker}"
+# One image does everything; see docker/Dockerfile for why it is Ubuntu 16.04.
+IMAGE="${IMAGE:-zx500-usb-dac:build}"
+# Named volume: the Sony tree is a multi-GB clone, so it must not live in the
+# image and must survive between runs.
+SRC_VOLUME="${SRC_VOLUME:-zx500-src}"
+
+KERNEL_REPO=https://github.com/97lily/2019_android_walkman.git
+KERNEL_COMMIT=1b316da17a6f4c50511f46498de0a16dd53231d9
+KERNEL_SRC=/src/2019_android_walkman
+TINYALSA_SRC=/src/tinyalsa
+
+# Checked per action rather than up front, so plain `zxbuild` still prints usage
+# on a machine without a container runtime.
+need_docker() {
+  command -v "$DOCKER" >/dev/null 2>&1 ||
+    { echo "no container runtime: '$DOCKER' not found in PATH" >&2; exit 1; }
+}
+
+if command -v nproc >/dev/null 2>&1; then JOBS_DEFAULT=$(nproc)
+else JOBS_DEFAULT=$(sysctl -n hw.ncpu 2>/dev/null || echo 4); fi
+JOBS="${JOBS:-$JOBS_DEFAULT}"
+
+# The release checkout may contain spaces; /work never does, which is also why
+# kernel/build.sh's BUILD_CWD workaround is a no-op in here.
+run_in() {
+  need_docker
+  local image=$1; shift
+  # Plain string, not an array: macOS ships bash 3.2, where expanding an empty
+  # array under `set -u` is itself an error.
+  local tty=; [ -t 0 ] && tty=-it
+  "$DOCKER" run --rm $tty --platform linux/arm64 \
+    -v "$ROOT:/work" -v "$SRC_VOLUME:/src" \
+    -e "JOBS=$JOBS" -w /work "$image" "$@"
+}
+
+build_images() {
+  need_docker
+  "$DOCKER" build --platform linux/arm64 \
+    -t "$IMAGE" -f "$ROOT/docker/Dockerfile" "$ROOT/docker"
+}
+
+# xenial's git 2.7.4 and openssl 1.0.2 still negotiate GitHub's TLS fine, so
+# the frozen image can fetch its own sources.
+fetch_kernel() {
+  run_in "$IMAGE" sh -c "
+    set -e
+    if [ ! -d $KERNEL_SRC/.git ]; then
+      git clone $KERNEL_REPO $KERNEL_SRC
+    fi
+    git -C $KERNEL_SRC fetch --all --tags
+    git -C $KERNEL_SRC checkout --detach $KERNEL_COMMIT
+    git -C $KERNEL_SRC rev-parse HEAD
+  "
+}
+
+require_kernel_src() {
+  need_docker
+  "$DOCKER" run --rm --platform linux/arm64 -v "$SRC_VOLUME:/src" \
+    "$IMAGE" test -d "$KERNEL_SRC/kernel_imx" ||
+    { echo "kernel tree missing; run: docker/zxbuild fetch" >&2; exit 1; }
+}
+
+TINYALSA_SOURCES="src/pcm.c src/pcm_hw.c src/pcm_plugin.c src/mixer.c \
+src/mixer_hw.c src/mixer_plugin.c src/limits.c src/snd_card_plugin.c"
+
+case "${1:-}" in
+  images) build_images;;
+  fetch)  fetch_kernel;;
+
+  kernel)
+    require_kernel_src
+    # build.sh applies the release patch idempotently and enforces the slot size.
+    run_in "$IMAGE" kernel/build.sh "$KERNEL_SRC/kernel_imx" /work/kernel/out
+    ;;
+
+  bridge)
+    # build.sh clones and patches tinyalsa itself when the directory is empty.
+    run_in "$IMAGE" bridge/build.sh "$TINYALSA_SRC"
+    ;;
+
+  test)
+    run_in "$IMAGE" sh -c "
+      set -e
+      [ -d $TINYALSA_SRC ] || { echo 'tinyalsa missing; run: docker/zxbuild bridge' >&2; exit 1; }
+      cd /work
+      srcs=''
+      for s in $TINYALSA_SOURCES; do srcs=\"\$srcs $TINYALSA_SRC/\$s\"; done
+      \$CC -O1 -g -fsanitize=address,undefined -I$TINYALSA_SRC/include \
+        -o /tmp/resampler-test tests/resampler-test.c \$srcs -ldl -lpthread
+      /tmp/resampler-test
+    "
+    ;;
+
+  all)
+    build_images; fetch_kernel
+    run_in "$IMAGE" kernel/build.sh "$KERNEL_SRC/kernel_imx" /work/kernel/out
+    run_in "$IMAGE" bridge/build.sh "$TINYALSA_SRC"
+    "$0" test
+    ;;
+
+  shell)
+    run_in "$IMAGE" bash
+    ;;
+
+  *) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 1;;
+esac

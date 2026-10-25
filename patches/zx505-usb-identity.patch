@@ -1,0 +1,66 @@
+--- a/usb-dac.sh
++++ b/usb-dac.sh
+@@ -1,5 +1,5 @@
+ #!/system/bin/sh
+-# ZX500 hi-res USB-DAC control (UAC2-only; keep the USB HAL running).
++# ZX505 4.08 USB-DAC control (UAC2-only; HAL restored on exit).
+ #   usb-dac.sh on                  bring up the DAC now
+ #   usb-dac.sh dac                 enable autostart + bring up the DAC now
+ #   usb-dac.sh mtp                 clear DAC autostart (reboot to restore MTP/adb)
+@@ -104,9 +104,31 @@
+ # does not fully resynchronise without a reboot, so this is best-effort -- but
+ # trying costs nothing, and not trying leaves the user with no USB at all.
+ restore_usb_config(){
++  resume_usb_hal
+   RC=$USBCFG_PREV
+   case "$RC" in ''|none) RC=$(default_usb_config);; esac
+   setprop sys.usb.config "$RC" 2>/dev/null
++}
++# Local ZX505 firmware service; stop only during exclusive DAC ownership.
++HAL_MARK=/dev/.zx-dac-usb-hal-owned
++pause_usb_hal(){
++  HS=$(getprop init.svc.usb-hal-1-1)
++  case "$HS" in running|restarting)
++    touch "$HAL_MARK" || return 1
++    stop usb-hal-1-1 || return 1;;
++    stopped) ;; *) return 1;;
++  esac
++  HI=0
++  while [ "$HI" -lt 30 ]; do
++    [ "$(getprop init.svc.usb-hal-1-1)" = stopped ] && return 0
++    sleep 0.1; HI=$((HI+1))
++  done
++  return 1
++}
++resume_usb_hal(){
++  [ -f "$HAL_MARK" ] || return 0
++  start usb-hal-1-1 || return 1
++  rm -f "$HAL_MARK"
+ }
+ clear_links(){ for l in "$G"/configs/b.1/*; do [ -L "$l" ] && rm -f "$l"; done; }
+ 
+@@ -242,6 +264,7 @@
+   # point can put it back rather than leaving the port dead.
+   USBCFG_PREV=$(getprop sys.usb.config)
+   setprop sys.usb.config none; sleep 1
++  pause_usb_hal || { abort_start "cannot obtain exclusive USB ownership"; return 1; }
+   unbind_udc || { abort_start "cannot unbind existing UDC"; return 1; }
+   clear_links
+   # DAC mode gets its own serial, derived from the physical one. Hosts key their
+@@ -252,6 +275,8 @@
+   SERIAL=$(getprop ro.serialno)
+   [ -n "$SERIAL" ] || { abort_start "device serial is unavailable"; return 1; }
+   SERIAL="${SERIAL}DAC"
++  write_attr_checked "$G/idVendor" "0x054c" || { abort_start "idVendor readback mismatch"; return 1; }
++  write_attr_checked "$G/idProduct" "0x0cf2" || { abort_start "idProduct readback mismatch"; return 1; }
+   write_attr_checked "$G/strings/0x409/serialnumber" "$SERIAL" || { abort_start "serialnumber readback mismatch"; return 1; }
+   write_attr_checked "$G/strings/0x409/product" "ZX500 USB-DAC" || { abort_start "product readback mismatch"; return 1; }
+   mkdir -p "$G/functions/uac2.0" || { abort_start "uac2 function creation failed"; return 1; }
+@@ -310,6 +335,7 @@
+   clear_links; rmdir "$G/functions/uac2.0" 2>/dev/null
+   # Restore Android's own USB choice rather than forcing adb on: with debugging
+   # disabled that used to leave an adb interface with no daemon behind it.
++  resume_usb_hal
+   setprop sys.usb.config none; sleep 1; setprop sys.usb.config "$(default_usb_config)"
+   echo "USB-DAC OFF: UDC confirmed unbound (reboot to fully restore USB)"
+   return 0
