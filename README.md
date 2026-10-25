@@ -1,4 +1,4 @@
-# ZX DSEE
+# ZX500-DSEE-USBDAC
 
 面向 **国行 Sony NW-ZX505 / Android 9 / 4.08.00（build 337）** 的非官方 USB DAC 音效扩展，基于 [ZX500-USB-DAC](https://github.com/remove/ZX500-USB-DAC)。
 
