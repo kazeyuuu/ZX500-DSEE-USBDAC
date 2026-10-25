@@ -4,7 +4,7 @@
 
 **[下载 ZX-DSEE-0.3.1.apk](ZX-DSEE-0.3.1.apk)** · **[部署指南](release/DEPLOY.zh-CN.md)** · **[来源与许可](NOTICE.md)**
 
-必须先具备兼容的 USB DAC 内核、KernelSU 和 root 授权；仅安装 APK 无法让原厂系统获得 USB DAC 功能。控制器补丁需按部署指南单独安装。
+必须先具备兼容的 USB DAC 内核、KernelSU 和 root 授权；仅安装 APK 无法让原厂系统获得 USB DAC 功能。控制器补丁需按部署指南单独安装。注意4.04版本未进行过验证，且4.08版本固件需要自行从索尼官网抓取。
 
 ## 功能
 
